@@ -1,1 +1,1 @@
-/Users/anna/connect4/target/debug/connect4: /Users/anna/connect4/src/main.rs
+/Users/anna/connect4/target/debug/connect4: /Users/anna/connect4/src/connect4.rs /Users/anna/connect4/src/main.rs /Users/anna/connect4/src/player2.rs /Users/anna/connect4/src/qlearn.rs

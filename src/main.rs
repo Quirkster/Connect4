@@ -1,8 +1,12 @@
 mod connect4;
 mod qlearn;
+mod player2;
+
+use std::collections::HashMap;
 
 use connect4::{Board, Tile};
-use qlearn::calculate_reward;
+use player2::Player2;
+use qlearn::{calculate_reward, QLearn};
 
 fn main() {
     println!("Hello, world!");
@@ -30,6 +34,18 @@ fn main() {
     board.insert(3, Tile::Blue);
 
     println!("{}", calculate_reward(&board));
+
+    let mut player1 = QLearn::new(4, 1);
+    //let mut player2 = QLearn::new(4,2);
+    let mut player2 = Player2::new(HashMap::new(), Tile::Blue);
+    let num_episodes = 4;
+
+    for _ in 0..num_episodes{
+        while let Some(_) = player1.next(){
+            player2.turn(&mut player1);
+        }
+        player2 = Player2::new(player1.qtable.clone(), Tile::Blue);
+    }
 
 }
 
