@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Iter};
+use std::collections::HashMap;
 
 use rand::{rng, Rng};
 
@@ -14,8 +14,8 @@ impl Player2{
         Player2{qtable, color}
     }
     pub fn turn(&self, state: &mut QLearn){
-        if let Some(actions) = state.qtable.get(&state.state){
-            let (max_index, _) = actions.iter().enumerate().fold((state.size*state.size, std::f64::NEG_INFINITY), |(max_index, max), (index, &val)|{
+        if let Some(actions) = self.qtable.get(&state.state){
+            let (max_index, _) = actions.iter().enumerate().fold((state.rows*state.cols, std::f64::NEG_INFINITY), |(max_index, max), (index, &val)|{
                 if val > max{
                     (index, val)
                 }else{
@@ -26,7 +26,11 @@ impl Player2{
 
         }else{
             let mut rng = rng();
-            state.insert(rng.random_range(0..4), self.color.clone());
+            state.insert(rng.random_range(0..state.cols), self.color.clone());
         }
+    }
+
+    pub fn self_move(&self, col:usize, state: &mut QLearn){
+        state.insert(col, self.color.clone());
     }
 }
