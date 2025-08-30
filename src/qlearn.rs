@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use crate::connect4::{Board, Tile};
 
-const EPSILON_MIN:f64 = 0.1;
-const EPSILON_DECAY:f64 = 0.9;
-const ALPHA: f64 = 0.3;
-const GAMMA: f64 = 0.9;
+pub const EPSILON_MIN:f64 = 0.1;
+pub const EPSILON_DECAY:f64 = 0.9;
+pub const ALPHA: f64 = 0.3;
+pub const GAMMA: f64 = 0.9;
 ///calculate reward for 4x4 
 /// returns 1 if victory, -1 if loss, 0 otherwise
 pub fn calculate_reward(state: &Board)->i32{
@@ -145,7 +145,7 @@ impl QLearn{
 }
 
 impl Iterator for QLearn{
-    type Item = Vec<i32>;
+    type Item = f64;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut rng = rand::rng();
@@ -204,6 +204,6 @@ impl Iterator for QLearn{
             return None
         }
         self.epsilon = (self.epsilon * EPSILON_DECAY).max(EPSILON_MIN);
-        return Some(self.state.clone())
+        return Some(prev_reward[action])
     }
 }

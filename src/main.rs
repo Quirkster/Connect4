@@ -2,6 +2,8 @@ mod connect4;
 mod qlearn;
 mod player2;
 mod gui;
+mod deepqlearn;
+mod neuralnetwork;
 
 use std::{collections::HashMap, io};
 
@@ -37,7 +39,7 @@ fn main() {
 
     println!("{}", calculate_reward(&board));
 
-    let mut player1 = QLearn::new(6, 7, 1);
+    let mut player1 = QLearn::new(4, 4, 1);
     //let mut player2 = QLearn::new(4,2);
     let mut player2 = Player2::new(HashMap::new(), Tile::Blue);
     let num_episodes = 1000000;

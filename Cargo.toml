@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ndarray = "0.16.1"
 rand = "0.9.2"
 rerun = "0.24.1"
 stopwatch = "0.0.7"
