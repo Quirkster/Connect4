@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use crate::connect4::{Board, Tile};
 
-pub const EPSILON_MIN:f64 = 0.1;
-pub const EPSILON_DECAY:f64 = 0.9;
+pub const EPSILON_MIN:f64 = 0.05;
+pub const EPSILON_DECAY:f64 = 0.995;
 pub const ALPHA: f64 = 0.3;
 pub const GAMMA: f64 = 0.9;
 ///calculate reward for 4x4 
@@ -207,3 +207,6 @@ impl Iterator for QLearn{
         return Some(prev_reward[action])
     }
 }
+
+//TODO: save trained data
+//TODO: cheaper way to store state

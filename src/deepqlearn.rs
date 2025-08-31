@@ -1,11 +1,13 @@
-use ndarray::{array, Array, Array1};
+use ndarray::{ Array, Array1};
 use rand::{seq::IndexedRandom, Rng};
 use rand::seq::SliceRandom;
 
 use crate::{connect4::Tile, qlearn::{ALPHA, EPSILON_DECAY, EPSILON_MIN, GAMMA}};
 use crate::neuralnetwork::NeuralNetwork;
 
-pub const BATCH_SIZE:usize = 6;
+pub const BATCH_SIZE:usize = 32;
+pub const LEARNING_RATE:f32 = 0.001;
+pub const TARGET_UPDATE_FREQ:i32 = 100;
 pub struct ReplayTuple{
     state: Array1<f32>,
     action: usize,
@@ -20,8 +22,8 @@ impl ReplayTuple{
 }
 pub struct DeepQLearn{
     pub replay_memory: Vec<ReplayTuple>,
-    pub action_value: NeuralNetwork,
-    pub target: NeuralNetwork,
+    pub action_value: NeuralNetwork,/* 
+    pub target: NeuralNetwork, */
     pub epsilon: f64,
     pub state: Array1<f32>,
     pub rows: usize,
@@ -32,8 +34,8 @@ pub struct DeepQLearn{
 impl DeepQLearn{
     pub fn new(rows:usize, cols:usize, player: i32)->DeepQLearn{
         let action_value = NeuralNetwork::new(42, &[64, 64], 7);
-        let target = NeuralNetwork::clone_from(&action_value);
-        DeepQLearn{replay_memory:Vec::new(), action_value, target, epsilon:1.0,  state: Array::zeros([rows*cols;1]), rows, cols, player}
+        //let target = NeuralNetwork::clone_from(&action_value);
+        DeepQLearn{replay_memory:Vec::new(), action_value, /* target, */ epsilon:1.0,  state: Array::zeros([rows*cols;1]), rows, cols, player}
     }
     pub fn insert(&mut self, col:usize, color: Tile)->bool{
         for row in (0..self.rows).rev(){
@@ -101,6 +103,8 @@ impl DeepQLearn{
 
         return 0.0
     }
+
+    
 }
 
 impl Iterator for DeepQLearn{
@@ -110,35 +114,38 @@ impl Iterator for DeepQLearn{
         let mut rng = rand::rng();
         let rand = rng.random_range(0.0..1.0);
         let prev_state = self.state.clone();
-        let mut action;
+        let action;
+        let inserted;
         if rand < self.epsilon {
             action = rng.random_range(0..self.cols);
             
-            let mut inserted = self.insert(action, if self.player == 1{Tile::Red} else{Tile::Blue});
-            let mut tries = 1;
+            inserted = self.insert(action, if self.player == 1{Tile::Red} else{Tile::Blue});
+            /* let mut tries = 1;
             while !inserted && tries <= 4{
                 action = rng.random_range(0..self.cols);
                 inserted = self.insert(action, if self.player == 1{Tile::Red} else{Tile::Blue});
                 tries += 1;
-            }
+            } */
             
         }
         else{
             //may have to check that state is initalized
-            let actions = self.action_value.forward(&self.state);
+            let actions: ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 1]>> = self.action_value.forward(&self.state);
+
             
-            action = *actions.iter().max_by(|&&a,&&b|{if (a-b).abs() < 1e-6{return std::cmp::Ordering::Equal} else if a < b {return std::cmp::Ordering::Less} return std::cmp::Ordering::Greater}).expect("invalid action") as usize;
-            let mut inserted = self.insert( action, if self.player == 1{Tile::Red} else{Tile::Blue});
+            action = actions.iter().enumerate().max_by(|(_, &a), (_, &b)| {if (a - b).abs() < 1e-6 {std::cmp::Ordering::Equal} else if a < b {std::cmp::Ordering::Less} else {std::cmp::Ordering::Greater}}).map(|(i, _)| i).expect("invalid action");
+            inserted = self.insert( action, if self.player == 1{Tile::Red} else{Tile::Blue});
             
         }
-        let reward = if self.calculate_reward() == (self.player as f32){
+        let reward = if !inserted{
+            -0.1
+        }else if self.calculate_reward() == (self.player as f32){
             1.0
         }else if self.calculate_reward() == 0.0{
             0.0
         }else{
             -1.0
         };
-        println!("{reward}");
         self.replay_memory.push(ReplayTuple::new(prev_state.clone(), action, reward, self.state.clone(), (reward - 0.0).abs() > 1e-6 || (reward + 1.0).abs() < 1e-6));
         let next_q = self.action_value.forward(&self.state);
         let max_q_next = next_q.iter()
@@ -148,15 +155,15 @@ impl Iterator for DeepQLearn{
             .fold(f32::NEG_INFINITY, f32::max);
 
         let target = reward + GAMMA as f32 * max_q_next * (1.0 - ((reward - 0.0).abs() > 1e-6) as u8 as f32);
-            
-        /* let (activations, pre_activations) = self.action_value.forward(&(Array1::from(self.state)));
-        self.action_value.backward_and_update(&activations, &pre_activations, action, target, learning_rate);
-
-        state = next_state;
+        let (activations, pre_activations) = self.action_value.forward_with_cache(&self.state);
+        self.action_value.backward_and_update(&activations, &pre_activations, action, target, LEARNING_RATE);
         
-        self.epsilon = (self.epsilon * EPSILON_DECAY).max(EPSILON_MIN); */
+        if (reward - 0.0).abs() > 1e-6{
+            return None;
+        }
+        
         //TODO: represent actual reward
-        return Some(0.0)
+        return Some(reward)
     }
     
 }
