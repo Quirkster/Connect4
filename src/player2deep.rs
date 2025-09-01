@@ -1,3 +1,5 @@
+use rand::{rng, Rng};
+
 use crate::connect4::Tile;
 use crate::deepqlearn::DeepQLearn;
 use crate::neuralnetwork::NeuralNetwork;
@@ -13,15 +15,11 @@ impl Player2Deep{
     }
     pub fn turn(&self, state: &mut DeepQLearn){
         /* if let Some(actions) = self.qnet.forward(&state.state){ */
+        let mut rng = rng();
         let actions = self.qnet.forward(&state.state);
-        let (max_index, _) = actions.iter().enumerate().fold((state.rows*state.cols, std::f32::NEG_INFINITY), |(max_index, max), (index, &val)|{
-            if val > max{
-                (index, val)
-            }else{
-                (max_index, max)
-            }
-        });
-        state.insert(max_index, self.color.clone());
+        let (_, indices) = actions.iter().enumerate().fold((f32::NEG_INFINITY, Vec::new()), |(mx, mut indices), (idx, &val)|{if (mx - val).abs() < 1e-6 {indices.push(idx); (mx, indices)} else if val < mx {(mx, indices)} else {(val, vec![idx])}});
+        let action = indices[rng.random_range(0..indices.len())];
+        state.insert(action, self.color.clone());
 
         /* }else{
             let mut rng = rng();

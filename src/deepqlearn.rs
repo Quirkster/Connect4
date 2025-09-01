@@ -1,13 +1,13 @@
 use ndarray::{ Array, Array1};
 use rand::{seq::IndexedRandom, Rng};
-use rand::seq::SliceRandom;
+use rand::seq::{IteratorRandom, SliceRandom};
 
 use crate::{connect4::Tile, qlearn::{ALPHA, EPSILON_DECAY, EPSILON_MIN, GAMMA}};
 use crate::neuralnetwork::NeuralNetwork;
 
-pub const BATCH_SIZE:usize = 32;
-pub const LEARNING_RATE:f32 = 0.001;
-pub const TARGET_UPDATE_FREQ:i32 = 100;
+pub const BATCH_SIZE: usize = 32;
+pub const LEARNING_RATE:f32 = 1e-4;
+pub const TARGET_UPDATE_FREQ:i32 = 500;
 pub struct ReplayTuple{
     state: Array1<f32>,
     action: usize,
@@ -22,8 +22,8 @@ impl ReplayTuple{
 }
 pub struct DeepQLearn{
     pub replay_memory: Vec<ReplayTuple>,
-    pub action_value: NeuralNetwork,/* 
-    pub target: NeuralNetwork, */
+    pub action_value: NeuralNetwork,
+    pub target: NeuralNetwork,
     pub epsilon: f64,
     pub state: Array1<f32>,
     pub rows: usize,
@@ -34,8 +34,8 @@ pub struct DeepQLearn{
 impl DeepQLearn{
     pub fn new(rows:usize, cols:usize, player: i32)->DeepQLearn{
         let action_value = NeuralNetwork::new(42, &[64, 64], 7);
-        //let target = NeuralNetwork::clone_from(&action_value);
-        DeepQLearn{replay_memory:Vec::new(), action_value, /* target, */ epsilon:1.0,  state: Array::zeros([rows*cols;1]), rows, cols, player}
+        let target = NeuralNetwork::clone_from(&action_value);
+        DeepQLearn{replay_memory:Vec::new(), action_value,  target,  epsilon:1.0,  state: Array::zeros([rows*cols;1]), rows, cols, player}
     }
     pub fn insert(&mut self, col:usize, color: Tile)->bool{
         for row in (0..self.rows).rev(){
@@ -116,6 +116,8 @@ impl Iterator for DeepQLearn{
         let prev_state = self.state.clone();
         let action;
         let inserted;
+        //with probability epsilon select random action. else choose the optimal action so far
+        //execute action a
         if rand < self.epsilon {
             action = rng.random_range(0..self.cols);
             
@@ -132,33 +134,52 @@ impl Iterator for DeepQLearn{
             //may have to check that state is initalized
             let actions: ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 1]>> = self.action_value.forward(&self.state);
 
-            
-            action = actions.iter().enumerate().max_by(|(_, &a), (_, &b)| {if (a - b).abs() < 1e-6 {std::cmp::Ordering::Equal} else if a < b {std::cmp::Ordering::Less} else {std::cmp::Ordering::Greater}}).map(|(i, _)| i).expect("invalid action");
+            //println!("{actions:?}");
+            //let mut indices = Vec::new();
+            let (_, indices) = actions.iter().enumerate().fold((f32::NEG_INFINITY, Vec::new()), |(mx, mut indices), (idx, &val)|{if (mx - val).abs() < 1e-6 {indices.push(idx); (mx, indices)} else if val < mx {(mx, indices)} else {(val, vec![idx])}});
+            action = indices[rng.random_range(0..indices.len())];
             inserted = self.insert( action, if self.player == 1{Tile::Red} else{Tile::Blue});
             
         }
+        //observe reward
+        let r = self.calculate_reward();
         let reward = if !inserted{
             -0.1
-        }else if self.calculate_reward() == (self.player as f32){
+        }else if r == (self.player as f32){
             1.0
-        }else if self.calculate_reward() == 0.0{
+        }else if r == 0.0{
             0.0
         }else{
             -1.0
         };
-        self.replay_memory.push(ReplayTuple::new(prev_state.clone(), action, reward, self.state.clone(), (reward - 0.0).abs() > 1e-6 || (reward + 1.0).abs() < 1e-6));
-        let next_q = self.action_value.forward(&self.state);
-        let max_q_next = next_q.iter()
-            .enumerate()
-            .filter(|(a, _)| self.is_action_valid(*a))
-            .map(|(_, v)| *v)
-            .fold(f32::NEG_INFINITY, f32::max);
 
-        let target = reward + GAMMA as f32 * max_q_next * (1.0 - ((reward - 0.0).abs() > 1e-6) as u8 as f32);
-        let (activations, pre_activations) = self.action_value.forward_with_cache(&self.state);
-        self.action_value.backward_and_update(&activations, &pre_activations, action, target, LEARNING_RATE);
+        //store transition
+        self.replay_memory.push(ReplayTuple::new(prev_state.clone(), action, reward, self.state.clone(), (reward - 0.0).abs() > 1e-6 || (reward + 1.0).abs() < 1e-6));
+
         
-        if (reward - 0.0).abs() > 1e-6{
+        if self.replay_memory.len() >= BATCH_SIZE {
+            //sample a random mini batch from replay memory
+            let batch = self.replay_memory.iter().choose_multiple(&mut rng, BATCH_SIZE);
+            
+            for ReplayTuple { state, action, reward, next_state, done } in batch {
+                let next_q = self.target.forward(&next_state);
+                let max_q_next = next_q.iter()
+                    .enumerate()
+                    .filter(|(a, _)| self.is_action_valid(*a))
+                    .map(|(_, v)| *v)
+                    .fold(f32::NEG_INFINITY, f32::max);
+
+                //if next action terminates r, else r + gamma * max_q_next
+                let target = reward + GAMMA as f32 * max_q_next * if *done { 0.0 } else { 1.0 };
+
+
+                let (activations, pre_activations) = self.target.forward_with_cache(&state);
+                self.target.backward_and_update(&activations, &pre_activations, *action, target, LEARNING_RATE);
+            }
+        }
+        
+        if (reward - 0.0).abs() > 1e-6 && (reward + 0.1).abs() > 1e-6{
+            println!("reward: {reward}");
             return None;
         }
         

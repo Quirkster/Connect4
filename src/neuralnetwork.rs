@@ -19,8 +19,9 @@ impl LinearLayer{
         let mut rng = rand::rng();
 
         // He initialization (good for ReLU)
+        let std = (2.0 / input_size as f32).sqrt();
         let weights = Array2::from_shape_fn((output_size, input_size), |_| {
-            rng.random_range(-1.0..1.0) * (2.0 / input_size as f32).sqrt()
+            rng.sample::<f32, _>(rand_distr::StandardNormal) * std
         });
 
         let biases = Array1::zeros(output_size);
@@ -48,9 +49,10 @@ impl NeuralNetwork{
         for i in 0..(layer_sizes.len() - 1) {
             layers.push(LinearLayer::new(layer_sizes[i], layer_sizes[i + 1]));
         }
+
         Self {
             layers,
-            activation: |x|{x.max(0.0)} //relu
+            activation: |x|{if x > 0.0 { x } else { 0.01 * x }} //relu
         }
     }
     pub fn from_layers(layers:Vec<LinearLayer>)->Self{
@@ -72,19 +74,29 @@ impl NeuralNetwork{
     }
 
     pub fn forward_with_cache(&self, input: &Array1<f32>)-> (Vec<Array1<f32>>, Vec<Array1<f32>>){
+
+        assert!(
+            !input.iter().any(|x| x.is_nan()),
+            "NaN found in input"
+        );
+
         let mut activations = vec![input.clone()];
         let mut pre_activations = Vec::new();
         let mut x = input.clone();
 
         for (i, layer) in self.layers.iter().enumerate(){
             let z = layer.forward(&x);
-            pre_activations.push(z.clone());
 
+            pre_activations.push(z.clone());
+            //println!("Layer {}: z = {:?}", i, z);
             if i != self.layers.len() - 1{
                 x = z.mapv(self.activation);
             }else{
-                x = z;
+                x = z.clone();
             }
+
+            assert!(x.iter().all(|a| a.is_finite()), "NaN in activations");
+            //println!("Layer {}: a = {:?}", i, x);
 
             activations.push(x.clone());
         }
@@ -100,42 +112,41 @@ impl NeuralNetwork{
         learning_rate: f32,
     ) {
         let output = activations.last().unwrap();
-        let mut delta = Array1::<f32>::zeros(output.len());
         let predicted_q = output[action];
-
+        
+        // 1. Compute initial loss gradient: dL/dQ
+        let mut delta = Array1::<f32>::zeros(output.len());
         delta[action] = 2.0 * (predicted_q - target);
 
-        for i in (0..self.layers.len()).rev(){
+        // 2. Backpropagate through layers
+        for i in (0..self.layers.len()).rev() {
             let a_prev = &activations[i];
             let z = &pre_activations[i];
-
-            let dz = if i != self.layers.len() - 1 {
-                z.mapv(|v| Self::relu_derivative(v)) * &delta
-            } else {
-                delta.clone()
-            };
-
+            
+            // Activation gradient (always apply unless your output layer uses identity)
+            let dz = z.mapv(Self::relu_derivative) * &delta;
+            
             let layer = &mut self.layers[i];
 
             // Gradient for weights and biases
             let grad_w = dz.view().insert_axis(ndarray::Axis(1))
                 .dot(&a_prev.view().insert_axis(ndarray::Axis(0)));
 
+            //println!("{dz:?}");
             layer.weight_grads = grad_w;
             layer.bias_grads = dz.clone();
 
-            // Propagate delta to previous layer
-            delta = layer.weights.t().dot(&dz);
-
-            // Gradient descent update
+            // Update weights and biases
             layer.weights -= &(learning_rate * &layer.weight_grads);
             layer.biases -= &(learning_rate * &layer.bias_grads);
 
+            // Propagate delta to the previous layer
+            delta = layer.weights.t().dot(&dz);
         }
     }
 
     pub fn relu_derivative(x: f32) -> f32 {
-        if x > 0.0 { 1.0 } else { 0.0 }
+        if x > 0.0 { 1.0 } else { 0.01 }
     }
 
     // Optional: clone weights into a new network

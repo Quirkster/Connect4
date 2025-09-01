@@ -15,7 +15,6 @@ pub fn save_layers(path: &str, layers: &[LinearLayer]) -> std::io::Result<()> {
     for layer in layers {
         write_array2(&mut writer, &layer.weights)?;
         write_array1(&mut writer, &layer.biases)?;
-        println!("{:?}", layer.weight_grads);
         write_array2(&mut writer, &layer.weight_grads)?;
         write_array1(&mut writer, &layer.bias_grads)?;
     }

@@ -46,13 +46,14 @@ fn main() {
     println!("{}", calculate_reward(&board));
 
     
-    let num_episodes = 200000;
+    let num_episodes = 1;
     deep_q_learn(num_episodes);
+    //q_learn(num_episodes);
 
 }
 
 fn q_learn(num_episodes:i32){
-    let mut player1 = QLearn::new(4, 4, 1);
+    let mut player1 = QLearn::new(6, 7, 1);
     //let mut player2 = QLearn::new(4,2);
     let mut player2 = Player2::new(HashMap::new(), Tile::Blue);
     for episode in 0..num_episodes{
@@ -121,6 +122,9 @@ pub fn deep_q_learn(num_episodes: i32){
         //println!("{:?}, {:?}", player1.action_value, player2.qnet);
         println!("episode {episode} completed in {:?}", sw.elapsed());
         if episode % TARGET_UPDATE_FREQ == 0 {
+           player1.target = player1.action_value.clone_from();
+        }
+        if episode % 500 == 0{
            player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue) ;
         }
         // Decay epsilon
@@ -131,7 +135,7 @@ pub fn deep_q_learn(num_episodes: i32){
         player1.clear_board();
         
     }
-   let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
+   //let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
     //player2 = Player2::new(HashMap::new(), Tile::Blue);
     let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
 
