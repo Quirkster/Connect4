@@ -46,7 +46,7 @@ fn main() {
     println!("{}", calculate_reward(&board));
 
     
-    let num_episodes = 1;
+    let num_episodes = 1000000;
     deep_q_learn(num_episodes);
     //q_learn(num_episodes);
 
@@ -102,10 +102,10 @@ pub fn deep_q_learn(num_episodes: i32){
     
 
     let mut player1 = DeepQLearn::new(6, 7, 1);
-    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap());
+    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights9_1.bin").unwrap());
     //let mut player2 = DeepQLearn::new(4,4,2);
     let mut player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue);
-    //player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap());
+    //player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights9_1.bin").unwrap());
     for episode in 0..num_episodes{
         //let name = format!("episode {episode}");
         //let rec = rerun::RecordingStreamBuilder::new(name).spawn().unwrap();
@@ -113,7 +113,10 @@ pub fn deep_q_learn(num_episodes: i32){
         let sw = Stopwatch::start_new();
         //let mut turn_count = 0;
         while let Some(_) = player1.next(){
-            player2.turn(&mut player1);
+            
+            if player2.turn(&mut player1){
+                break
+            }
             //turn_count += 1;
             //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
             //turn_count += 1;
@@ -157,7 +160,12 @@ pub fn deep_q_learn(num_episodes: i32){
             .parse()
             .expect("Input was not a valid integer");
         if num < player1.cols{
-            player2.self_move(num as usize, &mut player1);
+            if player2.self_move(num as usize, &mut player1){
+                println!("You win!");
+
+                display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count + 1);
+                break
+            }
         }
         println!("You entered: {}", num);
         display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count + 1);

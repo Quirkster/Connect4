@@ -37,7 +37,7 @@ impl DeepQLearn{
         let target = NeuralNetwork::clone_from(&action_value);
         DeepQLearn{replay_memory:Vec::new(), action_value,  target,  epsilon:1.0,  state: Array::zeros([rows*cols;1]), rows, cols, player}
     }
-    pub fn insert(&mut self, col:usize, color: Tile)->bool{
+    pub fn insert(&mut self, col:usize, color: Tile)->i32{
         for row in (0..self.rows).rev(){
             if (self.state[row * self.cols + col] - 0.0).abs() < 1e-6{
                 self.state[row * self.cols + col] = match color {
@@ -46,10 +46,10 @@ impl DeepQLearn{
                     Tile::Empty => 0.0,
                 };
                 println!("inserted into col: {col}");
-                return true
+                return row as i32
             }
         }
-        false
+        -1
     }
     pub fn clear_board(&mut self){
         (0..(self.rows*self.cols)).for_each(|i|{
@@ -64,8 +64,7 @@ impl DeepQLearn{
     }
     ///calculate reward for 4x4 
 /// returns 1 if victory, -1 if loss, 0 otherwise
-    pub fn calculate_reward(&self)->f32{
-        let (rows, cols) = (self.rows, self.cols);
+    pub fn calculate_reward(&self, row: usize, col:usize, player:i32)->f32{
 
         let directions: [(i32, i32); 4] = [
             (0, 1),   
@@ -74,31 +73,36 @@ impl DeepQLearn{
             (1, -1),
         ];
 
-        for r in 0..rows{
-            for c in 0..cols{
-                if (self.state[r * cols + c] - 0.0) < 1e-6{
-                    continue
-                }
-                let player = self.state[r * cols + c];
-                if let Some(_) = directions.iter().find(|(dr, dc)|{
-                    let mut count = 0;
-                    for i in 0..4 {
-                        let nr = r as i32 + dr * i;
-                        let nc = c as i32 + dc * i;
-                        if 0 <= nr && (nr as usize) < rows && 0 <= nc && (nc as usize) < cols && self.state[nr as usize * cols + nc as usize] == player{
-                            count += 1
-                        }else{
-                            break
-                        }
-                    }
+        if let Some(_) = directions.iter().find(|&(x_dir,y_dir)|{
+            let mut count = 1;
+            let (mut x,mut y) = (1,1);
+            while row as i32 - x * x_dir >= 0 && col as i32 - y * y_dir >= 0{
+                if self.state[(row as i32 - x * x_dir) as usize * self.cols + (col as i32 - y * y_dir) as usize] == player as f32{
+                    count += 1;
                     if count == 4{
                         return true
                     }
-                    false
-                }){
-                    return player
+                }else{
+                    break
                 }
+                x += 1;
+                y += 1
             }
+            x = 1;
+            y = 1;
+            while ((row as i32 + x * x_dir) as usize) < self.rows && (col as i32 + y * y_dir) >= 0 && ((col as i32 + y * y_dir) as usize ) < self.cols {
+                if self.state[(row as i32 + x * x_dir) as usize * self.cols + (col as i32 + y * y_dir) as usize] == player as f32{
+                    count += 1;
+                    if count == 4{
+                        return true
+                    }
+                }
+                x += 1;
+                y += 1;
+            }
+            return false
+        }){
+            return player as f32
         }
 
         return 0.0
@@ -142,16 +146,18 @@ impl Iterator for DeepQLearn{
             
         }
         //observe reward
-        let r = self.calculate_reward();
-        let reward = if !inserted{
+        
+        let reward = if inserted == -1{ 
             -0.1
-        }else if r == (self.player as f32){
-            1.0
-        }else if r == 0.0{
-            0.0
-        }else{
-            -1.0
-        };
+        }else {
+            let r = self.calculate_reward(inserted as usize, action, self.player);
+            if r == (self.player as f32){
+                1.0
+            }else if r == 0.0{
+                0.0
+            }else{
+                -1.0
+        }};
 
         //store transition
         self.replay_memory.push(ReplayTuple::new(prev_state.clone(), action, reward, self.state.clone(), (reward - 0.0).abs() > 1e-6 || (reward + 1.0).abs() < 1e-6));
