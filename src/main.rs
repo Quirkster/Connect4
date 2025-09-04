@@ -46,7 +46,7 @@ fn main() {
     println!("{}", calculate_reward(&board));
 
     
-    let num_episodes = 1000000;
+    let num_episodes = 1000;
     deep_q_learn(num_episodes);
     //q_learn(num_episodes);
 
@@ -102,33 +102,47 @@ pub fn deep_q_learn(num_episodes: i32){
     
 
     let mut player1 = DeepQLearn::new(6, 7, 1);
-    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights9_1.bin").unwrap());
+    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap());
     //let mut player2 = DeepQLearn::new(4,4,2);
     let mut player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue);
-    //player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights9_1.bin").unwrap());
+    player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights9_3.bin").unwrap());
     for episode in 0..num_episodes{
         //let name = format!("episode {episode}");
         //let rec = rerun::RecordingStreamBuilder::new(name).spawn().unwrap();
         //let mut turn_count = 0;
         let sw = Stopwatch::start_new();
         //let mut turn_count = 0;
-        while let Some(_) = player1.next(){
+        if episode % 2 == 0{
+             while let Some(_) = player1.next(){
             
-            if player2.turn(&mut player1){
-                break
+                if player2.turn(&mut player1){
+                    break
+                }
+                //turn_count += 1;
+                //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
+                //turn_count += 1;
             }
-            //turn_count += 1;
-            //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
-            //turn_count += 1;
+        }else{
+            player2.turn(&mut player1);
+            while let Some(_) = player1.next(){
+            
+                if player2.turn(&mut player1){
+                    break
+                }
+                //turn_count += 1;
+                //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
+                //turn_count += 1;
+            }
         }
+       
 
         //println!("{:?}, {:?}", player1.action_value, player2.qnet);
         println!("episode {episode} completed in {:?}", sw.elapsed());
         if episode % TARGET_UPDATE_FREQ == 0 {
            player1.target = player1.action_value.clone_from();
         }
-        if episode % 500 == 0{
-           player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue) ;
+        if episode % 50 == 0{
+           player2 = Player2Deep::new(player1.action_value.clone_from(), player2.color) ;
         }
         // Decay epsilon
         player1.epsilon = (player1.epsilon * EPSILON_DECAY).max(EPSILON_MIN);
@@ -136,13 +150,18 @@ pub fn deep_q_learn(num_episodes: i32){
         //println!("{}", player1.epsilon);
 
         player1.clear_board();
+        if episode % 4 == 0{
+            player1.player = if player1.player == 1{2} else{1};
+            player2.color = if player2.color == Tile::Red{Tile::Blue} else{Tile::Red};
+        }
+
         
     }
-   //let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
+    let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
     //player2 = Player2::new(HashMap::new(), Tile::Blue);
     let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
 
-    let mut turn_count = 0;
+    /* let mut turn_count = 0;
     while let Some(_) = player1.next(){
 
         display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count);
@@ -170,7 +189,7 @@ pub fn deep_q_learn(num_episodes: i32){
         println!("You entered: {}", num);
         display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count + 1);
         turn_count += 1;
-    }
+    } */
     
 }
 

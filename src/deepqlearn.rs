@@ -1,5 +1,7 @@
 use ndarray::{ Array, Array1};
+use rand::SeedableRng;
 use rand::{seq::IndexedRandom, Rng};
+use rand::rngs::SmallRng;
 use rand::seq::{IteratorRandom, SliceRandom};
 
 use crate::{connect4::Tile, qlearn::{ALPHA, EPSILON_DECAY, EPSILON_MIN, GAMMA}};
@@ -75,9 +77,10 @@ impl DeepQLearn{
 
         if let Some(_) = directions.iter().find(|&(x_dir,y_dir)|{
             let mut count = 1;
-            let (mut x,mut y) = (1,1);
-            while row as i32 - x * x_dir >= 0 && col as i32 - y * y_dir >= 0{
-                if self.state[(row as i32 - x * x_dir) as usize * self.cols + (col as i32 - y * y_dir) as usize] == player as f32{
+            let mut x= 1;
+            while row as i32 - x * x_dir >= 0 && col as i32 - x * y_dir >= 0{
+
+                if self.state[(row as i32 - x * x_dir) as usize * self.cols + (col as i32 - x * y_dir) as usize] == player as f32{
                     count += 1;
                     if count == 4{
                         return true
@@ -86,19 +89,19 @@ impl DeepQLearn{
                     break
                 }
                 x += 1;
-                y += 1
             }
             x = 1;
-            y = 1;
-            while ((row as i32 + x * x_dir) as usize) < self.rows && (col as i32 + y * y_dir) >= 0 && ((col as i32 + y * y_dir) as usize ) < self.cols {
-                if self.state[(row as i32 + x * x_dir) as usize * self.cols + (col as i32 + y * y_dir) as usize] == player as f32{
+            while ((row as i32 + x * x_dir) as usize) < self.rows && (col as i32 + x * y_dir) >= 0 && ((col as i32 + x * y_dir) as usize ) < self.cols {
+
+                if self.state[(row as i32 + x * x_dir) as usize * self.cols + (col as i32 + x * y_dir) as usize] == player as f32{
                     count += 1;
                     if count == 4{
                         return true
                     }
+                }else{
+                    break
                 }
                 x += 1;
-                y += 1;
             }
             return false
         }){
@@ -115,7 +118,7 @@ impl Iterator for DeepQLearn{
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut rng = rand::rng();
+        let mut rng = SmallRng::from_rng(&mut rand::rng());
         let rand = rng.random_range(0.0..1.0);
         let prev_state = self.state.clone();
         let action;
@@ -165,8 +168,9 @@ impl Iterator for DeepQLearn{
         
         if self.replay_memory.len() >= BATCH_SIZE {
             //sample a random mini batch from replay memory
-            let batch = self.replay_memory.iter().choose_multiple(&mut rng, BATCH_SIZE);
-            
+            //let batch = self.replay_memory.iter().choose_multiple(&mut rng, BATCH_SIZE);
+            let batch: Vec<&ReplayTuple> = self.replay_memory.choose_multiple(&mut rng, BATCH_SIZE).collect();
+
             for ReplayTuple { state, action, reward, next_state, done } in batch {
                 let next_q = self.target.forward(&next_state);
                 let max_q_next = next_q.iter()
