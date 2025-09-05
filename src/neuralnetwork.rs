@@ -1,9 +1,11 @@
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, Axis};
 use rand::Rng;
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use byteorder::{WriteBytesExt, LittleEndian};
+
+use crate::qlearn::EPSILON_DECAY;
 
 #[derive(Debug)]
 pub struct LinearLayer {
@@ -81,18 +83,21 @@ impl NeuralNetwork{
         );
 
         let mut activations = vec![input.clone()];
-        let mut pre_activations = Vec::new();
+        //let mut pre_activations = Vec::with_capacity(self.layers.len());
         let mut x = input.clone();
-
+        let mut masks = Vec::with_capacity(self.layers.len());
         for (i, layer) in self.layers.iter().enumerate(){
             let z = layer.forward(&x);
 
-            pre_activations.push(z.clone());
+            //pre_activations.push(z.clone());
             //println!("Layer {}: z = {:?}", i, z);
             if i != self.layers.len() - 1{
                 x = z.mapv(self.activation);
+
+                masks.push(z.mapv(|x| if x > 0.0 { 1.0 } else { 0.0 }));
             }else{
                 x = z.clone();
+                masks.push(Array1::ones(z.len()));
             }
 
             assert!(x.iter().all(|a| a.is_finite()), "NaN in activations");
@@ -100,13 +105,14 @@ impl NeuralNetwork{
 
             activations.push(x.clone());
         }
-        (activations, pre_activations)
+        (activations, /* pre_activations, */ masks)
     }
 
     pub fn backward_and_update(
         &mut self,
         activations: &[Array1<f32>],
-        pre_activations: &[Array1<f32>],
+        /* pre_activations: &[Array1<f32>], */
+        mask: &[Array1<f32>],
         action: usize,
         target: f32,
         learning_rate: f32,
@@ -121,27 +127,33 @@ impl NeuralNetwork{
         // 2. Backpropagate through layers
         for i in (0..self.layers.len()).rev() {
             let a_prev = &activations[i];
-            let z = &pre_activations[i];
-            
+            let m = &mask[i];
             // Activation gradient (always apply unless your output layer uses identity)
-            let dz = z.mapv(Self::relu_derivative) * &delta;
+            let is_output = i == self.layers.len() - 1;
+            let dz = if is_output {
+                delta.clone() // identity activation -> derivative = 1
+            } else {
+                m * &delta
+            };
             
             let layer = &mut self.layers[i];
 
             // Gradient for weights and biases
-            let grad_w = dz.view().insert_axis(ndarray::Axis(1))
-                .dot(&a_prev.view().insert_axis(ndarray::Axis(0)));
+            let grad_w = dz.view().insert_axis(Axis(1))
+                .dot(&a_prev.view().insert_axis(Axis(0)))
+                + (EPSILON_DECAY as f32 * &layer.weights);
 
             //println!("{dz:?}");
             layer.weight_grads = grad_w;
             layer.bias_grads = dz.clone();
 
+            let delta_prev = layer.weights.t().dot(&dz);
             // Update weights and biases
             layer.weights -= &(learning_rate * &layer.weight_grads);
             layer.biases -= &(learning_rate * &layer.bias_grads);
 
             // Propagate delta to the previous layer
-            delta = layer.weights.t().dot(&dz);
+            delta = delta_prev;
         }
     }
 

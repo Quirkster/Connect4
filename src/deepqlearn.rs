@@ -151,7 +151,7 @@ impl Iterator for DeepQLearn{
         //observe reward
         
         let reward = if inserted == -1{ 
-            -0.1
+            -0.5
         }else {
             let r = self.calculate_reward(inserted as usize, action, self.player);
             if r == (self.player as f32){
@@ -183,12 +183,12 @@ impl Iterator for DeepQLearn{
                 let target = reward + GAMMA as f32 * max_q_next * if *done { 0.0 } else { 1.0 };
 
 
-                let (activations, pre_activations) = self.target.forward_with_cache(&state);
-                self.target.backward_and_update(&activations, &pre_activations, *action, target, LEARNING_RATE);
+                let (activations, /* pre_activations, */ mask) = self.target.forward_with_cache(&state);
+                self.target.backward_and_update(&activations, /* &pre_activations, */&mask, *action, target, LEARNING_RATE);
             }
         }
         
-        if (reward - 0.0).abs() > 1e-6 && (reward + 0.1).abs() > 1e-6{
+        if (reward - 0.0).abs() > 1e-6 && (reward + 0.5).abs() > 1e-6{
             println!("reward: {reward}");
             return None;
         }
