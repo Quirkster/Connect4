@@ -17,7 +17,10 @@ impl Player2Deep{
         /* if let Some(actions) = self.qnet.forward(&state.state){ */
         let mut rng = rng();
         let actions = self.qnet.forward(&state.state);
-        let (_, indices) = actions.iter().enumerate().fold((f32::NEG_INFINITY, Vec::new()), |(mx, mut indices), (idx, &val)|{if (mx - val).abs() < 1e-6 {indices.push(idx); (mx, indices)} else if val < mx {(mx, indices)} else {(val, vec![idx])}});
+        let (_, indices) = actions.iter().enumerate().filter(|(idx, _)| state.is_action_valid(*idx)).fold((f32::NEG_INFINITY, Vec::new()), |(mx, mut indices), (idx, &val)|{if (mx - val).abs() < 1e-6 {indices.push(idx); (mx, indices)} else if val < mx {(mx, indices)} else {(val, vec![idx])}});
+        if indices.len() == 0{
+            return true
+        }
         let action = indices[rng.random_range(0..indices.len())];
         let prev_state = state.state.clone();
         let inserted = state.insert(action, self.color.clone());
