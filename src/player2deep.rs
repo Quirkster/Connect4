@@ -16,7 +16,13 @@ impl Player2Deep{
     pub fn turn(&self, state: &mut DeepQLearn)->bool{
         /* if let Some(actions) = self.qnet.forward(&state.state){ */
         let mut rng = rng();
-        let actions = self.qnet.forward(&state.state);
+        let player_num = match self.color{
+            Tile::Red => 1.0,
+            Tile::Blue => -1.0,
+            Tile::Empty => 0.0,
+        };
+        let actions = self.qnet.forward(&(player_num * &state.state));
+        //println!("{:?}", actions);
         let (_, indices) = actions.iter().enumerate().filter(|(idx, _)| state.is_action_valid(*idx)).fold((f32::NEG_INFINITY, Vec::new()), |(mx, mut indices), (idx, &val)|{if (mx - val).abs() < 1e-6 {indices.push(idx); (mx, indices)} else if val < mx {(mx, indices)} else {(val, vec![idx])}});
         if indices.len() == 0{
             return true
@@ -24,11 +30,6 @@ impl Player2Deep{
         let action = indices[rng.random_range(0..indices.len())];
         let prev_state = state.state.clone();
         let inserted = state.insert(action, self.color.clone());
-        let player_num = match self.color{
-            Tile::Red => 1.0,
-            Tile::Blue => 2.0,
-            Tile::Empty => 0.0,
-        };
         if (state.calculate_reward(inserted as usize, action, player_num as i32) - player_num).abs() < 1e-6{
             state.replay_memory.push(ReplayTuple::new(prev_state, 0, -1.0, state.state.clone(), true));
             return true
@@ -44,7 +45,7 @@ impl Player2Deep{
         let inserted = state.insert(col, self.color.clone());
         let player_num = match self.color{
             Tile::Red => 1.0,
-            Tile::Blue => 2.0,
+            Tile::Blue => -1.0,
             Tile::Empty => 0.0,
         };
         if (state.calculate_reward(inserted as usize, col, player_num as i32) - player_num).abs() < 1e-6{
@@ -52,4 +53,5 @@ impl Player2Deep{
         }
         false
     }
+
 }

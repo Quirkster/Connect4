@@ -6,7 +6,9 @@ mod deepqlearn;
 mod neuralnetwork;
 mod player2deep;
 mod fileops;
+mod nngui;
 
+use core::num;
 use std::{collections::HashMap, io};
 
 use connect4::{Board, Tile};
@@ -46,10 +48,12 @@ fn main() {
     println!("{}", calculate_reward(&board));
 
     
-    let num_episodes = 100000;
+    let num_episodes = 10000;
     //deep_q_learn(num_episodes);
-    deep_q_test(num_episodes);
+    deep_q_test(num_episodes/10);
     //q_learn(num_episodes);
+
+    //play(&String::from("saved_weights.bin"));
 
 }
 
@@ -73,38 +77,18 @@ fn q_learn(num_episodes:i32){
         }
         
     }
-    let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
-    player2 = Player2::new(HashMap::new(), Tile::Blue);
-    let mut turn_count = 0;
-    while let Some(_) = player1.next(){
-        //player2.turn(&mut player1);
-        let mut input = String::new();
-
-        println!("Enter an integer:");
-
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
-
-        let num: usize = input
-            .trim()
-            .parse()
-            .expect("Input was not a valid integer");
-        if num < player1.cols{
-            player2.self_move(num as usize, &mut player1);
-        }
-        println!("You entered: {}", num);
-        display(&rec, &player1.state, player1.rows, player1.cols, turn_count);
-        turn_count += 1;
-    }
 }
 
 pub fn deep_q_test(num_tests:i32){
     let mut state = DeepQLearn::new(6,7,1);
     let mut player1_wins = 0;
     let mut player2_wins = 0;
-    let mut player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights7_4.bin").unwrap()),Tile::Blue);
-    let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights9_6.bin").unwrap()),Tile::Red);
+    let mut player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_1.bin").unwrap()),Tile::Blue);
+    let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_1.bin").unwrap()),Tile::Red);
+    //let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights12_27.bin").unwrap()),Tile::Red);
+
+    //let mut player2 = Player2Deep::new(NeuralNetwork::new(42, &[64,64], 7),Tile::Red);
+
     for episode in 0..num_tests{
         if episode % 2 == 0{
             let mut moves = 0;
@@ -156,17 +140,23 @@ pub fn deep_q_test(num_tests:i32){
 
     println!("player 1: {player1_wins}, player 2:{player2_wins}");
 
+
+    /* if player2_wins > player1_wins{
+        let _ = save_layers("randomly_good_weights.bin", &player2.qnet.layers);
+
+    } */
+
 }
 
 pub fn deep_q_learn(num_episodes: i32){
     
     let sw_main = Stopwatch::start_new();
     let mut player1 = DeepQLearn::new(6, 7, 1);
-    //player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights9_62.bin").unwrap());
-    //player1.epsilon = 0.5;
+    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap());
+    player1.epsilon = 0.95;
     //let mut player2 = DeepQLearn::new(4,4,2);
     let mut player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue);
-    //player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights9_62.bin").unwrap());
+    player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights12_25_3.bin").unwrap());
     for episode in 0..num_episodes{
         //let name = format!("episode {episode}");
         //let rec = rerun::RecordingStreamBuilder::new(name).spawn().unwrap();
@@ -201,7 +191,7 @@ pub fn deep_q_learn(num_episodes: i32){
         if episode % TARGET_UPDATE_FREQ == 0 {
            player1.target = player1.action_value.clone_from();
         }
-        if episode % 50 == 0{
+        if episode % 500 == 0{
            player2 = Player2Deep::new(player1.action_value.clone_from(), player2.color) ;
         }
         // Decay epsilon
@@ -209,18 +199,18 @@ pub fn deep_q_learn(num_episodes: i32){
         //println!("{:?}, {:?}", player1.action_value, player2.qnet);
         //println!("{}", player1.epsilon);
 
-        player1.clear_board();
+        player1.clear_board();/* 
         if episode % 4 == 0{
             player1.player = if player1.player == 1{2} else{1};
             player2.color = if player2.color == Tile::Red{Tile::Blue} else{Tile::Red};
-        }
+        } */
 
         
     }
     println!("{num_episodes} episodes completed in {:?}", sw_main.elapsed());
     let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
     //player2 = Player2::new(HashMap::new(), Tile::Blue);
-    let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
+    /* let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
 
     let mut turn_count = 0;
     while let Some(_) = player1.next(){
@@ -250,8 +240,57 @@ pub fn deep_q_learn(num_episodes: i32){
         println!("You entered: {}", num);
         display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count + 1);
         turn_count += 1;
+    } */
+}
+
+pub fn play(weights: &String){
+    let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
+    let player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers(weights).unwrap()), Tile::Blue);
+    //player1.qnet = NeuralNetwork::from_layers(load_layers("saved_weights12_25_3.bin").unwrap());
+
+    let player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers(weights).unwrap()),Tile::Red);
+    let mut state = DeepQLearn::new(6,7,1);
+
+    let mut moves = 0;
+    while moves < state.rows * state.cols{
+        println!("P1 Suggested moves: {:?}", player1.qnet.forward(&state.state));
+
+        if player1.turn(&mut state ){
+            display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
+            println!("You lose!");
+            break
+        }display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
+        
+
+        println!("Suggested moves: {:?}", player2.qnet.forward(&state.state));
+        let mut input = String::new();
+
+        println!("Enter an integer:");
+
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read line");
+
+        let num: usize = input
+            .trim()
+            .parse()
+            .expect("Input was not a valid integer");
+        if num < state.cols{
+            if player2.self_move(num as usize, &mut state){
+                println!("You win!");
+
+                display_deep(&rec, &state.state, state.rows, state.cols, moves as i32 + 1);
+                break
+            }
+        }
+        println!("You entered: {}", num);
+        display_deep(&rec, &state.state, state.rows, state.cols, moves as i32+ 1);
+        moves += 2;
     }
-    
+
+        //display_deep(&rec, &player1.state, player1.rows, player1.cols, 2*turn_count);
+        //player2.turn(&mut player1);
+
 }
 
 

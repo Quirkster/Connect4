@@ -3,9 +3,9 @@ use rand::prelude::*;
 use crate::connect4::{Board, Tile};
 
 pub const EPSILON_MIN:f64 = 0.05;
-pub const EPSILON_DECAY:f64 = 0.995;
+pub const EPSILON_DECAY:f64 = 0.1e-5;
 pub const ALPHA: f64 = 0.3;
-pub const GAMMA: f64 = 0.9;
+pub const GAMMA: f64 = 0.95;
 ///calculate reward for 4x4 
 /// returns 1 if victory, -1 if loss, 0 otherwise
 pub fn calculate_reward(state: &Board)->i32{
@@ -73,7 +73,7 @@ impl QLearn{
             if self.state[row * self.cols + col] == 0{
                 self.state[row * self.cols + col] = match color {
                     Tile::Red => 1,
-                    Tile::Blue => 2,
+                    Tile::Blue => -1,
                     Tile::Empty => 0,
                 };
                 println!("inserted into col: {col}");

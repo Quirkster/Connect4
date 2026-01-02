@@ -1,6 +1,7 @@
 use ndarray::{Array1, Array2, Axis};
 use rand::Rng;
 
+use std::f32::consts::E;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use byteorder::{WriteBytesExt, LittleEndian};
@@ -39,6 +40,7 @@ impl LinearLayer{
 pub struct NeuralNetwork {
     pub layers: Vec<LinearLayer>,
     activation: fn(f32) -> f32,
+    activation_derivative: fn(f32) -> f32
 }
 
 impl NeuralNetwork{
@@ -54,11 +56,14 @@ impl NeuralNetwork{
 
         Self {
             layers,
-            activation: |x|{if x > 0.0 { x } else { 0.01 * x }} //relu
+            activation: |x|{if x > 0.0 { x } else { 0.0 }}, //relu
+            activation_derivative: |x| {if x > 0.0 {1.0} else {0.0}}
+        
         }
     }
+
     pub fn from_layers(layers:Vec<LinearLayer>)->Self{
-        Self{layers, activation: |x|{x.max(0.0)}}
+        Self{layers, activation: |x|{x.max(0.0)}, activation_derivative: |x| {if x > 0.0 {1.0} else {0.0}}}
     }
 
     pub fn forward(&self, input: &Array1<f32>) -> Array1<f32> {
@@ -86,27 +91,27 @@ impl NeuralNetwork{
         //let mut pre_activations = Vec::with_capacity(self.layers.len());
         let mut x = input.clone();
         let mut masks = Vec::with_capacity(self.layers.len());
-        for (i, layer) in self.layers.iter().enumerate(){
+        for (i, mut layer) in self.layers.iter().enumerate(){
             let z = layer.forward(&x);
-
             //pre_activations.push(z.clone());
-            //println!("Layer {}: z = {:?}", i, z);
             if i != self.layers.len() - 1{
                 x = z.mapv(self.activation);
 
-                masks.push(z.mapv(|x| if x > 0.0 { 1.0 } else { 0.0 }));
+                masks.push(z.mapv((self.activation_derivative)));
             }else{
+                //are we sure that we wan't the relu to be all ones
                 x = z.clone();
                 masks.push(Array1::ones(z.len()));
             }
+            //Dropout --> find a better solution;
+            //x.iter_mut().for_each(|a| {if *a > 150.0{*a = 0.0}});
 
             assert!(x.iter().all(|a| a.is_finite()), "NaN in activations");
-            //println!("Layer {}: a = {:?}", i, x);
 
             activations.push(x.clone());
         }
         (activations, /* pre_activations, */ masks)
-    }
+    } 
 
     pub fn backward_and_update(
         &mut self,
@@ -122,34 +127,60 @@ impl NeuralNetwork{
         
         // 1. Compute initial loss gradient: dL/dQ
         let mut delta = Array1::<f32>::zeros(output.len());
-        delta[action] = 2.0 * (predicted_q - target);
+        //why 
+        //delta[action] = 2.0 * (predicted_q - target);
+        delta[action] = predicted_q - target;// * (self.activation_derivative)(target);
+
 
         // 2. Backpropagate through layers
         for i in (0..self.layers.len()).rev() {
             let a_prev = &activations[i];
-            let m = &mask[i];
+            let m: &ndarray::ArrayBase<ndarray::OwnedRepr<f32>, ndarray::Dim<[usize; 1]>> = &mask[i];
+
+
             // Activation gradient (always apply unless your output layer uses identity)
+
             let is_output = i == self.layers.len() - 1;
+
+            //layer delta
             let dz = if is_output {
                 delta.clone() // identity activation -> derivative = 1
             } else {
                 m * &delta
             };
             
-            let layer = &mut self.layers[i];
+            let layer:&mut LinearLayer = &mut self.layers[i];
+
+                        //println!("{:?}, {m:?}", layer.weights);
+
 
             // Gradient for weights and biases
             let grad_w = dz.view().insert_axis(Axis(1))
                 .dot(&a_prev.view().insert_axis(Axis(0)))
                 + (EPSILON_DECAY as f32 * &layer.weights);
 
-            //println!("{dz:?}");
+                /*hidden_error = np.dot(output_delta, self.weights_hidden_output.T)
+    hidden_delta = hidden_error * self.sigmoid_derivative(self.hidden_output)
+
+    self.weights_hidden_output += np.dot(self.hidden_output.T,
+                                         output_delta) * learning_rate
+    self.bias_output += np.sum(output_delta, axis=0,
+                               keepdims=True) * learning_rate
+    self.weights_input_hidden += np.dot(X.T, hidden_delta) * learning_rate
+    self.bias_hidden += np.sum(hidden_delta, axis=0,
+                               keepdims=True) * learning_rate */
+
+            //layer.bias_grads = grad_w.sum_axis(Axis(1));
+
             layer.weight_grads = grad_w;
             layer.bias_grads = dz.clone();
 
             let delta_prev = layer.weights.t().dot(&dz);
             // Update weights and biases
+
+            //println!("{:?}", layer.weight_grads.fold(0, |mut acc, &x|{if x > 0.05{acc += 1;} acc}));
             layer.weights -= &(learning_rate * &layer.weight_grads);
+
             layer.biases -= &(learning_rate * &layer.bias_grads);
 
             // Propagate delta to the previous layer
@@ -157,8 +188,65 @@ impl NeuralNetwork{
         }
     }
 
+    pub fn backward_accumulate(
+        &mut self,
+        activations: &[Array1<f32>],
+        /* pre_activations: &[Array1<f32>], */
+        mask: &[Array1<f32>],
+        action: usize,
+        target: f32,
+        dw_acc:&mut [Array2<f32>],
+        db_acc: &mut [Array1<f32>],
+
+
+    ) {
+        let output = activations.last().unwrap();
+        let predicted = output[action];
+
+        //For MSE loss: (1/2)*(pred-target)^2  => dL/dpred = (pred-target)
+        //If you use plain (pred-target)^2, derivative is 2*(pred-target).
+        let dl_dq = predicted - target;
+
+        // delta is gradient wrt pre-activation at current layer (dL/dz)
+        let mut delta = Array1::<f32>::zeros(output.len()); 
+        delta[action] = dl_dq;                // sparse TD error on chosen action
+
+        
+
+        // Backprop through layers from last to first
+        for i in (0..self.layers.len()).rev(){
+            let is_output = i == self.layers.len() - 1;
+            let a_prev =&activations[i];
+            let m = &mask[i];
+            let dz = if is_output {
+                delta.clone() // identity activation -> derivative = 1
+            } else {
+                m * &delta
+            };
+
+            let dw = dz.view().insert_axis(Axis(1))
+                        .dot(&a_prev.view().insert_axis(Axis(0)));
+
+            dw_acc[i] += &dw;
+            db_acc[i] += &dz;
+            let layer:&mut LinearLayer = &mut self.layers[i];
+            delta = (layer.weights).t().dot( &dz);
+
+
+
+        }
+  
+  
+    }
+
     pub fn relu_derivative(x: f32) -> f32 {
-        if x > 0.0 { 1.0 } else { 0.01 }
+        if x > 0.0 { 1.0 } else { 0.0 }
+    }
+
+    pub fn softmax(input: &Array1<f32>)-> Array1<f32>{
+        let e_i = input.map(|&i|{E.powf(i)});
+        let total_e_i = e_i.sum();
+        e_i.map(|&x|{x/total_e_i})
     }
 
     // Optional: clone weights into a new network
@@ -171,6 +259,7 @@ impl NeuralNetwork{
                 bias_grads: layer.bias_grads.clone()
             }).collect(),
             activation: self.activation,
+            activation_derivative: self.activation_derivative
         }
     }
 }
