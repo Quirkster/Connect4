@@ -8,6 +8,8 @@ use byteorder::{WriteBytesExt, LittleEndian};
 
 use crate::qlearn::EPSILON_DECAY;
 
+pub const WEIGHT_DECAY_L2:f32 = 1e-5;
+
 #[derive(Debug)]
 pub struct LinearLayer {
     pub weights: Array2<f32>,
@@ -157,7 +159,7 @@ impl NeuralNetwork{
             // Gradient for weights and biases
             let grad_w = dz.view().insert_axis(Axis(1))
                 .dot(&a_prev.view().insert_axis(Axis(0)))
-                + (EPSILON_DECAY as f32 * &layer.weights);
+                + ((WEIGHT_DECAY_L2 )as f32 * &layer.weights);
 
                 /*hidden_error = np.dot(output_delta, self.weights_hidden_output.T)
     hidden_delta = hidden_error * self.sigmoid_derivative(self.hidden_output)
@@ -224,12 +226,12 @@ impl NeuralNetwork{
                 m * &delta
             };
 
+            let layer:&mut LinearLayer = &mut self.layers[i];
             let dw = dz.view().insert_axis(Axis(1))
-                        .dot(&a_prev.view().insert_axis(Axis(0)));
+                        .dot(&a_prev.view().insert_axis(Axis(0))) + ((WEIGHT_DECAY_L2 )as f32 * &layer.weights);
 
             dw_acc[i] += &dw;
             db_acc[i] += &dz;
-            let layer:&mut LinearLayer = &mut self.layers[i];
             delta = (layer.weights).t().dot( &dz);
 
 
@@ -247,6 +249,10 @@ impl NeuralNetwork{
         let e_i = input.map(|&i|{E.powf(i)});
         let total_e_i = e_i.sum();
         e_i.map(|&x|{x/total_e_i})
+    }
+
+    pub fn sigmoid(input: f32)->f32{
+        1.0/(1.0 + E.powf(-input))
     }
 
     // Optional: clone weights into a new network

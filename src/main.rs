@@ -7,19 +7,23 @@ mod neuralnetwork;
 mod player2deep;
 mod fileops;
 mod nngui;
+mod stupidbot;
 
 use core::num;
 use std::{collections::HashMap, io};
 
 use connect4::{Board, Tile};
-use deepqlearn::{DeepQLearn, TARGET_UPDATE_FREQ};
+use deepqlearn::{DeepQLearn, TARGET_UPDATE_FREQ, EXPLORATION};
 use fileops::{load_layers, save_layers};
 use gui::{display, display_deep};
 use neuralnetwork::NeuralNetwork;
 use player2::Player2;
 use player2deep::Player2Deep;
 use qlearn::{calculate_reward, QLearn, EPSILON_DECAY, EPSILON_MIN};
+use rand::Rng;
 use stopwatch::Stopwatch;
+
+use crate::stupidbot::StupidBot;
 fn main() {
     println!("Hello, world!");
     let mut board = Board::new(4);
@@ -48,12 +52,12 @@ fn main() {
     println!("{}", calculate_reward(&board));
 
     
-    let num_episodes = 10000;
+    let num_episodes = 100000;
     //deep_q_learn(num_episodes);
-    deep_q_test(num_episodes/10);
+    deep_q_test(num_episodes/100);
     //q_learn(num_episodes);
 
-    //play(&String::from("saved_weights.bin"));
+    play(&String::from("saved_weights.bin"));
 
 }
 
@@ -83,21 +87,21 @@ pub fn deep_q_test(num_tests:i32){
     let mut state = DeepQLearn::new(6,7,1);
     let mut player1_wins = 0;
     let mut player2_wins = 0;
-    let mut player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_1.bin").unwrap()),Tile::Blue);
+    let mut player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap()),Tile::Blue);
     let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_1.bin").unwrap()),Tile::Red);
     //let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights12_27.bin").unwrap()),Tile::Red);
-
+    //let mut player2 = StupidBot::new(NeuralNetwork::from_layers(load_layers("saved_weights1_3_2.bin").unwrap()), Tile::Blue);
     //let mut player2 = Player2Deep::new(NeuralNetwork::new(42, &[64,64], 7),Tile::Red);
 
     for episode in 0..num_tests{
         if episode % 2 == 0{
             let mut moves = 0;
             while moves < state.rows * state.cols{
-                if player1.turn(&mut state ){
+                if player1.turn(&mut state, false ){
                     println!("player 1 win!");
                     player1_wins += 1;
                     break
-                }if player2.turn(&mut state){
+                }if player2.turn(&mut state , true ){
                     println!("player 2 win!");
                     player2_wins += 1;
                     break
@@ -111,12 +115,12 @@ pub fn deep_q_test(num_tests:i32){
         }else{
             let mut moves = 0;
             while moves < state.rows * state.cols{
-                if player2.turn(&mut state){
+                if player2.turn(&mut state, true ){
                     println!("player 2 win!");
                     player2_wins += 1;
                     break
                 }
-                if player1.turn(&mut state ){
+                if player1.turn(&mut state, false ){
                     println!("player 1 win!");
                     player1_wins += 1;
                     break
@@ -124,6 +128,7 @@ pub fn deep_q_test(num_tests:i32){
                 moves += 2;
             }
             
+            //player2.turns = 0;
             state.clear_board();
         }
 
@@ -151,22 +156,47 @@ pub fn deep_q_test(num_tests:i32){
 pub fn deep_q_learn(num_episodes: i32){
     
     let sw_main = Stopwatch::start_new();
-    let mut player1 = DeepQLearn::new(6, 7, 1);
-    player1.action_value = NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap());
-    player1.epsilon = 0.95;
-    //let mut player2 = DeepQLearn::new(4,4,2);
-    let mut player2 = Player2Deep::new(player1.action_value.clone_from(), Tile::Blue);
-    player2.qnet = NeuralNetwork::from_layers(load_layers("saved_weights12_25_3.bin").unwrap());
+    let mut training_agent = DeepQLearn::new(6, 7, 1);
+
+
+    //random_weights
+    let mut random_weights_agent = Player2Deep::new(training_agent.action_value.clone_from(), Tile::Blue);
+    random_weights_agent.randomize_weights();
+
+
+    //training bot
+    training_agent.action_value = NeuralNetwork::from_layers(load_layers("saved_weights1_3.bin").unwrap());
+    training_agent.epsilon = 1.0;
+    
+    //previous version of itself
+    let mut frozen_agent = Player2Deep::new(training_agent.action_value.clone_from(), Tile::Blue);
+    frozen_agent.qnet = NeuralNetwork::from_layers(load_layers("saved_weights1_3.bin").unwrap());
+
+
+    let mut current_best_bot = Player2Deep::new(training_agent.action_value.clone_from(), Tile::Blue);
+    current_best_bot.qnet = NeuralNetwork::from_layers(load_layers("saved_weights1_3.bin").unwrap());
+
+    let mut stupidbot = StupidBot::new(training_agent.action_value.clone_from(), Tile::Blue);
     for episode in 0..num_episodes{
         //let name = format!("episode {episode}");
         //let rec = rerun::RecordingStreamBuilder::new(name).spawn().unwrap();
         //let mut turn_count = 0;
+
+        let mut rng = rand::rng();
+        let num:f32 = rng.random();
+        let opponent = if num < 0.4{
+            &frozen_agent
+        } else if num > 0.8{
+            &random_weights_agent
+        }else{
+            &current_best_bot
+        };
         let sw = Stopwatch::start_new();
         //let mut turn_count = 0;
         if episode % 2 == 0{
-             while let Some(_) = player1.next(){
+             while let Some(_) = training_agent.next(){
             
-                if player2.turn(&mut player1){
+                if opponent.turn(&mut training_agent, true ){
                     break
                 }
                 //turn_count += 1;
@@ -174,10 +204,10 @@ pub fn deep_q_learn(num_episodes: i32){
                 //turn_count += 1;
             }
         }else{
-            player2.turn(&mut player1);
-            while let Some(_) = player1.next(){
+            opponent.turn(&mut training_agent, true);
+            while let Some(_) = training_agent.next(){
             
-                if player2.turn(&mut player1){
+                if opponent.turn(&mut training_agent, true){
                     break
                 }
                 //turn_count += 1;
@@ -186,20 +216,54 @@ pub fn deep_q_learn(num_episodes: i32){
             }
         }
 
+        //have it play a stupid bot 10% that just inserts in the same column/row so that it learns what connect 4 looks like
+        //since the turn function needs to be so different it has to be a different time and cant be randomly rotated like the others
+        if episode % 20 == 0{
+            training_agent.clear_board();
+             while let Some(_) = training_agent.next(){
+            
+                if stupidbot.turn(&mut training_agent ){
+                    break
+                }
+                //turn_count += 1;
+                //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
+                //turn_count += 1;
+            }
+            stupidbot.switch_column();
+        }else if episode % 10 == 0{
+            training_agent.clear_board();
+            stupidbot.turn(&mut training_agent);
+            while let Some(_) = training_agent.next(){
+            
+                if stupidbot.turn(&mut training_agent){
+                    break
+                }
+                //turn_count += 1;
+                //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
+                //turn_count += 1;
+            }
+            stupidbot.switch_column();
+        }
+
         //println!("{:?}, {:?}", player1.action_value, player2.qnet);
         println!("episode {episode} completed in {:?}", sw.elapsed());
         if episode % TARGET_UPDATE_FREQ == 0 {
-           player1.target = player1.action_value.clone_from();
+           training_agent.target = training_agent.action_value.clone_from();
         }
         if episode % 500 == 0{
-           player2 = Player2Deep::new(player1.action_value.clone_from(), player2.color) ;
+           frozen_agent = Player2Deep::new(training_agent.action_value.clone_from(), frozen_agent.color) ;
+           random_weights_agent.randomize_weights();
         }
         // Decay epsilon
-        player1.epsilon = (player1.epsilon * EPSILON_DECAY).max(EPSILON_MIN);
+        training_agent.epsilon = (training_agent.epsilon * EPSILON_DECAY).max(EPSILON_MIN);
         //println!("{:?}, {:?}", player1.action_value, player2.qnet);
         //println!("{}", player1.epsilon);
+        if training_agent.steps > EXPLORATION as usize {
+            training_agent.epsilon = (training_agent.epsilon * EPSILON_DECAY).max(EPSILON_MIN);
+        }
 
-        player1.clear_board();/* 
+        stupidbot.turns = 0;
+        training_agent.clear_board();/* 
         if episode % 4 == 0{
             player1.player = if player1.player == 1{2} else{1};
             player2.color = if player2.color == Tile::Red{Tile::Blue} else{Tile::Red};
@@ -208,7 +272,7 @@ pub fn deep_q_learn(num_episodes: i32){
         
     }
     println!("{num_episodes} episodes completed in {:?}", sw_main.elapsed());
-    let _ = save_layers("saved_weights.bin", &player1.action_value.layers);
+    let _ = save_layers("saved_weights.bin", &training_agent.action_value.layers);
     //player2 = Player2::new(HashMap::new(), Tile::Blue);
     /* let rec = rerun::RecordingStreamBuilder::new("final").spawn().unwrap();
 
@@ -255,7 +319,7 @@ pub fn play(weights: &String){
     while moves < state.rows * state.cols{
         println!("P1 Suggested moves: {:?}", player1.qnet.forward(&state.state));
 
-        if player1.turn(&mut state ){
+        if player1.turn(&mut state, false){
             display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
             println!("You lose!");
             break

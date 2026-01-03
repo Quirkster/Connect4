@@ -6,7 +6,7 @@ pub fn display(rec: &rerun::RecordingStream, state: &Vec<i32>, rows: usize, cols
         match *s{
             0 => rerun::Color::from_rgb(0, 255, 0),
             1 => rerun::Color::from_rgb(0,0,255),
-            2 => rerun::Color::from_rgb(255,0,0),
+            -1 => rerun::Color::from_rgb(255,0,0),
             _ => panic!("invalid color")
         }
     }).collect();
@@ -27,7 +27,7 @@ pub fn display_deep(rec: &rerun::RecordingStream, state: &Array1<f32>, rows: usi
         match *s{
             0.0 => rerun::Color::from_rgb(0, 255, 0),
             1.0 => rerun::Color::from_rgb(0,0,255),
-            2.0 => rerun::Color::from_rgb(255,0,0),
+            -1.0 => rerun::Color::from_rgb(255,0,0),
             _ => panic!("invalid color")
         }
     }).collect();

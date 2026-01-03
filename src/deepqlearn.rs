@@ -13,6 +13,7 @@ pub const BATCH_SIZE: usize = 64;
 pub const LEARNING_RATE:f32 = 2e-4;
 pub const TARGET_UPDATE_FREQ:i32 = 100;
 pub const WARMUP:usize = 400;
+pub const EXPLORATION:i32 = 500;
 pub struct ReplayTuple{
     state: Array1<f32>,
     action: usize,
@@ -263,13 +264,14 @@ impl Iterator for DeepQLearn{
         }
         
 
+
         //TO FIGURE OUT: HOW DOES THE NETWORK GET UPDATED FOR STEPS WHERE THE REWARD IS 0 BUT EVENTUALLY WE WIN
         if done{
             println!("reward: {reward}");
             return None;
         }
         
-        
+
         return Some(reward)
     }
     
