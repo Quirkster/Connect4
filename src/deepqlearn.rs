@@ -64,6 +64,7 @@ impl DeepQLearn{
         }
         -1
     }
+    
     pub fn clear_board(&mut self){
         //self.steps = 0;
         (0..(self.rows*self.cols)).for_each(|i|{
