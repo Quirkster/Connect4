@@ -447,7 +447,6 @@ impl MCTSNode{
         }
     }
     pub fn mcts_search(root_state:Array1<f32>, iterations:usize)->usize{
-        println!("{:?}", root_state);
         let root: Rc<RefCell<MCTSNode>>= Rc::new(RefCell::new(MCTSNode::new(None,Vec::new(), 1, 0, 0.0, 6, 7, 0,None, root_state )));
         if root.borrow().is_terminal(){
             panic!("OOPSY");
@@ -479,7 +478,7 @@ impl MCTSNode{
 
         let act;
         {
-            println!("{}, {}", iterations, r_borrow.children.len());
+            //println!("{}, {}", iterations, r_borrow.children.len());
             //println!("r_borrow {r_borrow:?}");
             let best_lst = r_borrow.children.iter().rev().fold((Vec::new(), -1), |(mut acc, max_visits), child|
             {
@@ -504,14 +503,14 @@ impl MCTSNode{
                 best = Some(Rc::clone(&best_lst.0[best_idx]));
             }
 
-            r_borrow.children.iter().for_each(|child|{
+            /* r_borrow.children.iter().for_each(|child|{
                 let a = child.as_ref();
                 println!("{:?}, {}, {}", a.unwrap().borrow().action, a.unwrap().borrow().visits, a.unwrap().borrow().wins);
-            });
+            }); */
 
             let best_ref  = best.as_ref();
 
-            println!("{}, {:?}", best_lst.0.len(), best_ref.unwrap().borrow().action);
+            //println!("{}, {:?}", best_lst.0.len(), best_ref.unwrap().borrow().action);
 
 
             act = match best_ref{

@@ -2,6 +2,7 @@ use rand::{rng, Rng};
 use rand_distr::{Distribution, StandardNormal};
 use rand_distr::weighted::WeightedIndex;
 
+use crate::alphabeta;
 use crate::connect4::Tile;
 use crate::deepqlearn::{DeepQLearn, ReplayTuple};
 use crate::neuralnetwork::NeuralNetwork;
@@ -53,17 +54,21 @@ impl Player2Deep{
        false
     }
 
-    pub fn self_move(&self, col:usize, state: &mut DeepQLearn)->bool{
+    pub fn self_move(&self, col:usize, state: &mut DeepQLearn)->alphabeta::Result{
         let inserted = state.insert(col, self.color.clone());
         let player_num = match self.color{
             Tile::Red => 1.0,
             Tile::Blue => -1.0,
             Tile::Empty => 0.0,
         };
-        if (state.calculate_reward(inserted as usize, col, player_num as i32) - player_num).abs() < 1e-6{
-            return true
+        let res = state.calculate_reward(inserted as usize, col, player_num as i32);
+        if ( res- player_num).abs() < 1e-6{
+            return alphabeta::Result::WIN
         }
-        false
+        if ( res- 0.5).abs() < 1e-6{
+            return alphabeta::Result::DRAW
+        }
+        return alphabeta::Result::INPROGRESS
     }
 
     pub fn randomize_weights(&mut self){

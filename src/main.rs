@@ -28,9 +28,9 @@ use stopwatch::Stopwatch;
 use crate::{alphabeta::MCTSNode, stupidbot::StupidBot};
 fn main() {
 
-    let num_episodes = 10000;
+    let num_episodes = 100000;
     //deep_q_learn(num_episodes);
-    //deep_q_test(num_episodes/10);
+    //deep_q_test(num_episodes/100);
     //q_learn(num_episodes);
 
     play(&String::from("saved_weights.bin"));
@@ -64,7 +64,7 @@ pub fn deep_q_test(num_tests:i32){
     let mut player1_wins = 0;
     let mut player2_wins = 0;
     let mut player1 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights.bin").unwrap()),Tile::Blue);
-    let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_3_3.bin").unwrap()),Tile::Red);
+    let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights1_13.bin").unwrap()),Tile::Red);
     //let mut player2 = Player2Deep::new(NeuralNetwork::from_layers(load_layers("saved_weights12_27.bin").unwrap()),Tile::Red);
     //let mut player2 = StupidBot::new(NeuralNetwork::from_layers(load_layers("saved_weights1_3_2.bin").unwrap()), Tile::Blue);
     //let mut player2 = Player2Deep::new(NeuralNetwork::new(42, &[64,64], 7),Tile::Red);
@@ -159,6 +159,7 @@ pub fn deep_q_learn(num_episodes: i32){
         //let rec = rerun::RecordingStreamBuilder::new(name).spawn().unwrap();
         //let mut turn_count = 0;
 
+        let mut current_best = false;
         let mut rng = rand::rng();
         let num:f32 = rng.random();
         let opponent = if num < 0.4{
@@ -166,27 +167,76 @@ pub fn deep_q_learn(num_episodes: i32){
         } else if num > 0.8{
             &random_weights_agent
         }else{
+
+            current_best = true;
             &current_best_bot
         };
         let sw = Stopwatch::start_new();
         //let mut turn_count = 0;
         if episode % 2 == 0{
+            let mut iters = 1000;
              while let Some(_) = training_agent.next(){
+                if current_best {
+                    let action = MCTSNode::mcts_search(training_agent.state.to_owned(), iters);
+                    let move_result = opponent.self_move(action as usize, &mut training_agent);
+                    if move_result == alphabeta::Result::WIN{
+                        println!("You lose!");
+                        break
+                    }
+                    if move_result == alphabeta::Result::DRAW{
+                        println!("DRAW!");
+                        break
+                    }
+                }
             
-                if opponent.turn(&mut training_agent, true ){
+                else if opponent.turn(&mut training_agent, true ){
                     break
                 }
+
+                iters = ((iters as f32) * 0.95) as usize;
                 //turn_count += 1;
                 //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
                 //turn_count += 1;
             }
         }else{
-            opponent.turn(&mut training_agent, true);
-            while let Some(_) = training_agent.next(){
+            let mut iters = 1000;
+            if current_best {
+                    let action = MCTSNode::mcts_search(training_agent.state.to_owned(), iters);
+
+                    let move_result = opponent.self_move(action as usize, &mut training_agent);
+                    if move_result == alphabeta::Result::WIN{
+                        println!("You lose!");
+                        break
+                    }
+                    if move_result == alphabeta::Result::DRAW{
+                        println!("DRAW!");
+                        break
+                    }
+                }
+            else{
+                opponent.turn(&mut training_agent, true);
+            }
             
-                if opponent.turn(&mut training_agent, true){
+            while let Some(_) = training_agent.next(){
+                if current_best {
+                    let action = MCTSNode::mcts_search(training_agent.state.to_owned(), iters);
+
+                    let move_result = opponent.self_move(action as usize, &mut training_agent);
+                    if move_result == alphabeta::Result::WIN{
+                        println!("You lose!");
+                        break
+                    }
+                    if move_result == alphabeta::Result::DRAW{
+                        println!("DRAW!");
+                        break
+                    }
+                }
+            
+                else if opponent.turn(&mut training_agent, true){
                     break
                 }
+
+                iters = ((iters as f32) * 0.95) as usize;
                 //turn_count += 1;
                 //display_deep(&rec, &player1.state, player1.rows, player1.cols, turn_count);
                 //turn_count += 1;
@@ -296,18 +346,18 @@ pub fn play(weights: &String){
     while moves < state.rows * state.cols{
         println!("P1 Suggested moves: {:?}", player1.qnet.forward(&state.state));
 
-        /*if player1.turn(&mut state, false){
+        if player1.turn(&mut state, false){
             display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
             println!("You lose!");
             break
-        } */
-        let action = MCTSNode::mcts_search(state.state.to_owned(), 10000);
+        } 
+        /* let action = MCTSNode::mcts_search(state.state.to_owned(), 10000);
 
         if player1.self_move(action as usize, &mut state){
             display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
             println!("You lose!");
             break
-        }
+        } */
        
        display_deep(&rec, &state.state, state.rows, state.cols, moves as i32);
 
@@ -326,10 +376,16 @@ pub fn play(weights: &String){
             .parse()
             .expect("Input was not a valid integer");
         if num < state.cols{
-            if player2.self_move(num as usize, &mut state){
-                println!("You win!");
-
+            let move_result = player2.self_move(num as usize, &mut state);
+            if move_result == alphabeta::Result::WIN{
                 display_deep(&rec, &state.state, state.rows, state.cols, moves as i32 + 1);
+
+                println!("You Win!");
+                break
+            }
+            if move_result == alphabeta::Result::DRAW{
+                display_deep(&rec, &state.state, state.rows, state.cols, moves as i32 + 1);
+                println!("DRAW!");
                 break
             }
         }

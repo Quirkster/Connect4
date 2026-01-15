@@ -139,15 +139,19 @@ impl DeepQLearn{
             return 0.5
         } */
 
+       if self.is_draw(){
+            return 0.5
+       }
+
         return 0.0
     }
 
     pub fn is_draw(&self)->bool{
         !self.state.iter().any(|&row|{
             if row != 0.0{
-                return true
+                return false
             }
-            false
+            true
         })
     }
 
@@ -200,9 +204,9 @@ impl Iterator for DeepQLearn{
             let r = self.calculate_reward(inserted as usize, action, self.player);
             if r == (self.player as f32){
                 1.0
-            }/* else if self.calculate_reward(inserted as usize, action, if self.player == 1{2} else{1}) == 0.5{
+            }else if self.calculate_reward(inserted as usize, action, if self.player == 1{2} else{1}) == 0.5{
                 0.5
-            } */else if r == 0.0 || r == 0.5{
+            }else if r == 0.0 || r == 0.5{
                 0.0
             }else{
                 -1.0
